@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+
+<h1>Shrey Shanbhag</h1>
+<h2>Lead Engineer, Front Line Support at Bristol Myers Squibb</h2>
+
+<!-- Arrange biography on the left and image on the right -->
+<div class="bio-container">
+
+    <div class="bio">
+        <p>
+          Shrey Shanbhag is a Lead Engineer at Bristol Myers Squibb, specializing in digital manufacturing systems and automation for Cell Therapy production. He leads global frontline support for manufacturing systems and focuses on solving complex technical problems, eliminating recurring issues, and improving system reliability. He holds a B.S. in Chemical Engineering at University of South Florida and is currently pursuing an M.S. in Artificial Intelligence at Johns Hopkins University.  
+        </p>
+    </div>
+
+    <div>
+        <!-- Profile image loaded from the static folder -->
+        <img src="{{ url_for('static', filename='profile.jpg') }}"
+             alt="Profile picture"
+             class="profile-image">
+    </div>
+
+</div>
+
+{% endblock %}

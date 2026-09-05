@@ -1,0 +1,74 @@
+/* General styling for all pages */
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: white;
+    color: #111;
+}
+
+/* Navigation bar displayed at the top of each page */
+nav {
+    background-color: #4a86b8;
+    display: flex;
+    justify-content: flex-end;
+    padding-right: 30px;
+}
+
+/* Individual navigation links */
+nav a {
+    color: white;
+    text-decoration: none;
+    padding: 16px 22px;
+    font-weight: bold;
+}
+
+/* Change color when the mouse is over a navigation link */
+nav a:hover {
+    background-color: #5b9bd5;
+}
+
+/* Highlight the navigation link for the current page */
+nav a.active {
+    background-color: #6fa8dc;
+}
+
+/* Main content area */
+main {
+    padding: 35px 40px;
+}
+
+
+h1 {
+    font-size: 36px;
+    margin-bottom: 10px;
+}
+
+h2 {
+    font-size: 26px;
+    margin-top: 20px;
+    margin-bottom: 35px;
+}
+
+/* Place biography and profile picture side-by-side */
+.bio-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 60px;
+}
+
+/* Biography occupies the left side */
+.bio {
+    flex: 1;
+    max-width: 700px;
+    font-size: 18px;
+    line-height: 1.5;
+}
+
+/* Control profile picture size */
+.profile-image {
+    width: 450px;
+    max-width: 40%;
+    height: auto;
+    object-fit: cover;
+}

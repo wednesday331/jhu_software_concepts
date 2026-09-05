@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}My Portfolio{% endblock %}</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<nav>
+    <a href="{{ url_for('pages.home') }}"
+       class="{% if request.endpoint == 'pages.home' %}active{% endif %}">
+        Home
+    </a>
+
+    <a href="{{ url_for('pages.contact') }}"
+       class="{% if request.endpoint == 'pages.contact' %}active{% endif %}">
+        Contact
+    </a>
+
+    <a href="{{ url_for('pages.projects') }}"
+       class="{% if request.endpoint == 'pages.projects' %}active{% endif %}">
+        Projects
+    </a>
+</nav>
+
+<!-- Page-specific content is inserted here -->
+<main>
+    {% block content %}
+    {% endblock %}
+</main>
+
+</body>
+</html>
