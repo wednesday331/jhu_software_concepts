@@ -230,7 +230,7 @@ def _call_llm(program_text: str) -> Dict[str, str]:
     out = llm.create_chat_completion(
         messages=messages,
         temperature=0.0,
-        max_tokens=64,
+        max_tokens=128,
         top_p=1.0,
     )
 
