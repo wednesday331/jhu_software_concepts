@@ -1,5 +1,13 @@
 # Module 2 - GradCafe Web Scraping and LLM Data Cleaning
 
+## Student Information
+
+- Name: Shrey Shanbhag
+- JHED ID: 33EBE2
+- Module: Module 2
+- Assignment: Web Scraping
+- Due Date: September 13, 2026
+
 ## Overview
 
 This project collects publicly available graduate admissions result data from GradCafe, parses the applicant information into structured JSON, and uses a local large language model (LLM) to normalize program and university names.
