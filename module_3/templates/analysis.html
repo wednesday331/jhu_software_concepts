@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GradCafe Data Analysis</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>GradCafe Data Analysis</h1>
+            <p>Live analysis of applicant entries stored in PostgreSQL.</p>
+
+            <div class="action-buttons">
+                <form action="{{ url_for('update_analysis') }}" method="post">
+                    <button type="submit">Update Analysis</button>
+                </form>
+
+                <form action="{{ url_for('pull_data') }}" method="post">
+                    <button
+                        id="pull-data-button"
+                        type="submit"
+                        {% if pull_status.running %}disabled{% endif %}
+                    >
+                        {% if pull_status.running %}
+                            Pulling Data...
+                        {% else %}
+                            Pull Data
+                        {% endif %}
+                    </button>
+                </form>
+            </div>
+
+            <p id="pull-status-message" class="pull-status">
+                {{ pull_status.message }}
+            </p>
+
+            <p
+                id="pull-running-message"
+                class="pull-status"
+                {% if not pull_status.running %}hidden{% endif %}
+            >
+                New data is currently being retrieved.
+                Update Analysis will continue to show the records
+                already available in PostgreSQL.
+            </p>
+        </header>
+
+        <h2>Required Analysis Questions</h2>
+
+        <section class="card">
+            <h3>1. How many entries are from applicants who applied for Fall 2026?</h3>
+            <p>{{ "{:,}".format(results.fall_2026_count) }} entries</p>
+        </section>
+
+        <section class="card">
+            <h3>2. What percentage of applicants with a usable nationality classification are international?</h3>
+            <p>
+                {% if results.international_percentage is not none %}
+                    {{ "%.2f"|format(results.international_percentage) }}%
+                {% else %}
+                    N/A
+                {% endif %}
+            </p>
+        </section>
+
+        <section class="card">
+            <h3>3. What are the average GPA and GRE scores?</h3>
+            <p>GPA: {{ "%.2f"|format(results.average_gpa) if results.average_gpa is not none else "N/A" }}</p>
+            <p>GRE Quantitative: {{ "%.2f"|format(results.average_gre) if results.average_gre is not none else "N/A" }}</p>
+            <p>GRE Verbal: {{ "%.2f"|format(results.average_gre_v) if results.average_gre_v is not none else "N/A" }}</p>
+            <p>GRE Analytical Writing: {{ "%.2f"|format(results.average_gre_aw) if results.average_gre_aw is not none else "N/A" }}</p>
+        </section>
+
+        <section class="card">
+            <h3>4. What is the average GPA of American Fall 2026 applicants?</h3>
+            <p>{{ "%.2f"|format(results.american_gpa) if results.american_gpa is not none else "N/A" }}</p>
+        </section>
+
+        <section class="card">
+            <h3>5. What percentage of Fall 2025 entries are acceptances?</h3>
+            <p>{{ ("%.2f"|format(results.fall_2025_acceptance_percentage)) ~ "%" if results.fall_2025_acceptance_percentage is not none else "N/A" }}</p>
+        </section>
+
+        <section class="card">
+            <h3>6. What is the average GPA of accepted Fall 2026 applicants?</h3>
+            <p>{{ "%.2f"|format(results.accepted_gpa) if results.accepted_gpa is not none else "N/A" }}</p>
+        </section>
+
+        <section class="card">
+            <h3>7. How many applicants applied to JHU for a master's in Computer Science?</h3>
+            <p>{{ "{:,}".format(results.jhu_count) }} entries</p>
+        </section>
+
+        <section class="card">
+            <h3>8. How many accepted Fall 2026 Computer Science PhD entries match the four specified universities using original fields?</h3>
+            <p>{{ "{:,}".format(results.original_count) }} entries</p>
+        </section>
+
+        <section class="card">
+            <h3>9. What is the count using LLM-generated fields, and how does it compare?</h3>
+            <p>LLM-generated fields: {{ "{:,}".format(results.llm_count) }}</p>
+            <p>Original fields: {{ "{:,}".format(results.original_count) }}</p>
+            <p>Difference (LLM − original): {{ "%+d"|format(results.difference) }}</p>
+        </section>
+
+        <h2>Original Analysis Questions</h2>
+
+        <section class="card">
+            <h3>1. Among Fall 2026 American and International applicants, what percentage of each group received an acceptance?</h3>
+            {% for group in results.acceptance_by_group %}
+                <p>
+                    {{ group.group }}:
+                    {{ "{:,}".format(group.accepted) }} accepted out of
+                    {{ "{:,}".format(group.total) }} entries
+                    ({{ "%.2f"|format(group.percentage) if group.percentage is not none else "N/A" }}%)
+                </p>
+            {% endfor %}
+        </section>
+
+        <section class="card">
+            <h3>2. Which five universities have the most Fall 2026 applicant entries?</h3>
+            <ol>
+                {% for university in results.top_universities %}
+                    <li>
+                        {{ university.university }}:
+                        {{ "{:,}".format(university.count) }} entries
+                    </li>
+                {% endfor %}
+            </ol>
+        </section>
+    </main>
+
+    <script>
+        const pullButton = document.getElementById("pull-data-button");
+        const statusMessage = document.getElementById("pull-status-message");
+        const runningMessage = document.getElementById("pull-running-message");
+
+        async function refreshPullStatus() {
+            try {
+                const response = await fetch(
+                    "{{ url_for('get_pull_status') }}",
+                    { cache: "no-store" }
+                );
+
+                if (!response.ok) {
+                    throw new Error("Could not retrieve Pull Data status.");
+                }
+
+                const status = await response.json();
+
+                pullButton.disabled = status.running;
+                pullButton.textContent = status.running
+                    ? "Pulling Data..."
+                    : "Pull Data";
+
+                statusMessage.textContent = status.message;
+                runningMessage.hidden = !status.running;
+
+            } catch (error) {
+                console.error("Pull Data status update failed:", error);
+            }
+        }
+
+        // Check immediately when the page opens.
+        refreshPullStatus();
+
+        // Check every two seconds while the page remains open.
+        setInterval(refreshPullStatus, 2000);
+    </script>
+</body>
+</html>
