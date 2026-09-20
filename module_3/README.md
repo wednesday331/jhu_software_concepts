@@ -1,4 +1,4 @@
-﻿# Module 3 â€” Database Queries, SQLAlchemy, and Dynamic Webpages
+﻿# Module 3 - Database Queries, SQLAlchemy, and Dynamic Webpages
 
 ## Overview
 
@@ -84,14 +84,14 @@ Questions 8 and 9 compare results obtained using original program and university
 
 ## Project Files
 
-* `load_data.py` â€” loads applicant records into PostgreSQL.
-* `load_original_universities.py` â€” loads original university names into the supplementary table.
-* `models.py` â€” defines the SQLAlchemy ORM mappings.
-* `query_data.py` â€” executes the raw SQL analysis.
-* `orm_queries.py` â€” executes the SQLAlchemy ORM analysis.
-* `query_results.pdf` â€” documents the 11 SQL questions, queries, results, and explanations.
-* `llm_extend_applicant_data.json` â€” contains the cleaned applicant dataset.
-* `requirements.txt` â€” lists the project dependencies.
+* `load_data.py` - loads applicant records into PostgreSQL.
+* `load_original_universities.py` - loads original university names into the supplementary table.
+* `models.py` - defines the SQLAlchemy ORM mappings.
+* `query_data.py` - executes the raw SQL analysis.
+* `orm_queries.py` - executes the SQLAlchemy ORM analysis.
+* `query_results.pdf` - documents the 11 SQL questions, queries, results, and explanations.
+* `llm_extend_applicant_data.json` - contains the cleaned applicant dataset.
+* `requirements.txt` - lists the project dependencies.
 
 ### LLM model setup
 
