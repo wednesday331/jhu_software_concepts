@@ -12,6 +12,14 @@ The `applicant_original_universities` table preserves original university names 
 
 Database connection settings are read from environment variables instead of being stored in the Python source files.
 
+## Setup and Running the Project
+
+For database connection settings, dependency installation, data loading, SQL and ORM commands, and Flask instructions, see `llm_hosting/README.md`.
+
+Run `python load_data.py` first; it creates the main applicants table if needed. Before running `python load_original_universities.py` on a new database, create the supplementary table in pgAdmin using:
+
+`CREATE TABLE IF NOT EXISTS applicant_original_universities (p_id INTEGER PRIMARY KEY REFERENCES applicants(p_id), university TEXT);`
+
 ## Raw SQL Analysis
 
 `query_data.py` executes the nine required questions and two original questions using Psycopg and PostgreSQL SQL queries. The questions, results, SQL statements, and explanations are documented in `query_results.pdf`.
@@ -88,4 +96,5 @@ Questions 8 and 9 compare results obtained using original program and university
 ### LLM model setup
 
 The TinyLlama GGUF model file is not included in this submission because it is a large downloaded artifact. The LLM hosting code in `llm_hosting/app.py` uses `hf_hub_download` to download `tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf` from `TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF` when the model is first needed. An internet connection and the dependencies listed in `llm_hosting/requirements.txt` are required for that initial download.
+
 
