@@ -78,9 +78,9 @@ Both scripts should produce the same results for all 11 questions.
 
 ## Analysis Notes
 
-Question 3 calculates each average independently and filters GPA and GRE values to the score ranges specified in the query. The GPA filter assumes a 0â€“4 scale, so values reported on other GPA scales are excluded from that average.
+Question 3 calculates each average independently and filters GPA and GRE values to the score ranges specified in the query. The GPA filter assumes a 0-4 scale, so values reported on other GPA scales are excluded from that average.
 
-Questions 8 and 9 compare results obtained using original program and university fields with results obtained using LLM-generated fields. The original-field query returned 28 matching entries, while the LLM-field query returned 24, a difference of âˆ’4. This is a difference between the total matching counts; it does not establish that exactly four individual records were classified differently.
+Questions 8 and 9 compare results obtained using original program and university fields with results obtained using LLM-generated fields. The original-field query returned 28 matching entries, while the LLM-field query returned 24, a difference of -4. This is a difference between the total matching counts; it does not establish that exactly four individual records were classified differently.
 
 ## Project Files
 
