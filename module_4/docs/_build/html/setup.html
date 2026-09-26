@@ -98,22 +98,51 @@
 </section>
 <section id="postgresql-configuration">
 <h2>PostgreSQL Configuration<a class="headerlink" href="#postgresql-configuration" title="Link to this heading"></a></h2>
-<p>The application uses PostgreSQL through SQLAlchemy.</p>
-<p>The database connection is configured using the <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code>
+<p>The project uses PostgreSQL for data storage and analysis.</p>
+<p>Two related database configuration methods are used.</p>
+<p>Direct Psycopg scripts such as <code class="docutils literal notranslate"><span class="pre">load_data.py</span></code> use the standard
+PostgreSQL environment variables:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">PGHOST</span></code></dt><dd><p>PostgreSQL host name.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">PGPORT</span></code></dt><dd><p>PostgreSQL port.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">PGDATABASE</span></code></dt><dd><p>PostgreSQL database name.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">PGUSER</span></code></dt><dd><p>PostgreSQL user name.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">PGPASSWORD</span></code></dt><dd><p>PostgreSQL password.</p>
+</dd>
+</dl>
+<p>The Flask and SQLAlchemy components use the <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code>
 environment variable.</p>
 <p>A PostgreSQL SQLAlchemy connection string has the following form:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>postgresql+psycopg://USERNAME:PASSWORD@localhost:5432/DATABASE_NAME
 </pre></div>
 </div>
 <p>For example, in Windows PowerShell:</p>
-<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="nv">$env:DATABASE_URL</span> <span class="p">=</span> <span class="s2">"postgresql+psycopg://postgres:PASSWORD@localhost:5432/gradcafe"</span>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="nv">$password</span> <span class="p">=</span> <span class="nb">Read-Host</span> <span class="s2">"PostgreSQL password"</span> <span class="n">-AsSecureString</span>
+<span class="nv">$plainPassword</span> <span class="p">=</span> <span class="no">[System.Net.NetworkCredential]</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="nv">$password</span><span class="p">).</span><span class="n">Password</span>
+<span class="nv">$encodedPassword</span> <span class="p">=</span> <span class="no">[System.Uri]</span><span class="p">::</span><span class="n">EscapeDataString</span><span class="p">(</span><span class="nv">$plainPassword</span><span class="p">)</span>
+
+<span class="nv">$env:PGHOST</span> <span class="p">=</span> <span class="s2">"localhost"</span>
+<span class="nv">$env:PGPORT</span> <span class="p">=</span> <span class="s2">"5432"</span>
+<span class="nv">$env:PGDATABASE</span> <span class="p">=</span> <span class="s2">"gradcafe"</span>
+<span class="nv">$env:PGUSER</span> <span class="p">=</span> <span class="s2">"postgres"</span>
+<span class="nv">$env:PGPASSWORD</span> <span class="p">=</span> <span class="nv">$plainPassword</span>
+
+<span class="nv">$env:DATABASE_URL</span> <span class="p">=</span> <span class="s2">"postgresql+psycopg://postgres:$encodedPassword@localhost:5432/gradcafe"</span>
 </pre></div>
 </div>
-<p>If the password contains special URL characters, it should be URL encoded
-before being placed in the connection string.</p>
-<p>The application reads <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> when creating the SQLAlchemy
-engine. Tests may override the database configuration so that production
-database settings are not required for every test.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">PG*</span></code> variables are used by direct Psycopg scripts such as
+<code class="docutils literal notranslate"><span class="pre">load_data.py</span></code>. <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code> is used when creating the SQLAlchemy
+engine for the Flask and ORM components.</p>
+<p>If the password contains characters that have special meaning in a URL,
+it should be URL encoded before being placed in <code class="docutils literal notranslate"><span class="pre">DATABASE_URL</span></code>.</p>
+<p>Do not store the real PostgreSQL password in source code or commit it to
+GitHub.</p>
+<p>Tests can override database and application dependencies so that the
+production PostgreSQL configuration is not required for every test.</p>
 </section>
 <section id="running-the-flask-application">
 <h2>Running the Flask Application<a class="headerlink" href="#running-the-flask-application" title="Link to this heading"></a></h2>
@@ -136,20 +165,21 @@ GradCafe analysis webpage.</p>
 </div>
 <p>The Module 4 <code class="docutils literal notranslate"><span class="pre">pytest.ini</span></code> file automatically enables coverage
 measurement and requires 100 percent source-code coverage.</p>
-<p>Individual test groups can also be selected using Pytest markers.</p>
-<p>For example:</p>
+<p>The required marker groups can also be run together:</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python -m pytest ./module_4/tests -m "web or buttons or analysis or db or integration"</span>
 </pre></div>
 </div>
-<p>Other available markers include <code class="docutils literal notranslate"><span class="pre">buttons</span></code>, <code class="docutils literal notranslate"><span class="pre">analysis</span></code>, <code class="docutils literal notranslate"><span class="pre">db</span></code>, and
-<code class="docutils literal notranslate"><span class="pre">integration</span></code>.</p>
+<p>The available markers are <code class="docutils literal notranslate"><span class="pre">web</span></code>, <code class="docutils literal notranslate"><span class="pre">buttons</span></code>, <code class="docutils literal notranslate"><span class="pre">analysis</span></code>, <code class="docutils literal notranslate"><span class="pre">db</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">integration</span></code>.</p>
 </section>
 <section id="building-the-sphinx-documentation">
 <h2>Building the Sphinx Documentation<a class="headerlink" href="#building-the-sphinx-documentation" title="Link to this heading"></a></h2>
 <p>From the repository root, build the HTML documentation with:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python -m sphinx -b html ./module_4/docs ./module_4/docs/_build/html</span>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">python -m sphinx -W -b html ./module_4/docs ./module_4/docs/_build/html</span>
 </pre></div>
 </div>
+<p>The <code class="docutils literal notranslate"><span class="pre">-W</span></code> option treats Sphinx warnings as errors so documentation
+problems are detected during the build.</p>
 <p>After a successful build, the documentation homepage is located at:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>module_4/docs/_build/html/index.html
 </pre></div>
