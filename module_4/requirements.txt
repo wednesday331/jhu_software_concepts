@@ -8,9 +8,8 @@ beautifulsoup4
 websocket-client
 requests
 
-# LLM cleaning dependencies
+# LLM support
 huggingface_hub>=0.23.0
-llama-cpp-python>=0.2.90
 
 # Testing and coverage
 pytest>=8

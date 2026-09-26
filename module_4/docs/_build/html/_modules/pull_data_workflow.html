@@ -1,0 +1,249 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>pull_data_workflow &mdash; GradCafe Analytics 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            GradCafe Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../testing.html">Testing Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">GradCafe Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">pull_data_workflow</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for pull_data_workflow</h1><div class="highlight"><pre>
+<span></span>
+<span class="sd">"""Capture, clean, and import GradCafe applicant records."""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">capture_page</span><span class="w"> </span><span class="kn">import</span> <span class="n">capture_pages</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">clean</span><span class="w"> </span><span class="kn">import</span> <span class="n">clean_data</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">load_data</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">connect_to_database</span><span class="p">,</span>
+    <span class="n">get_applicant_id</span><span class="p">,</span>
+    <span class="n">main</span> <span class="k">as</span> <span class="n">import_applicants</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">load_original_universities</span><span class="w"> </span><span class="kn">import</span> <span class="n">main</span> <span class="k">as</span> <span class="n">import_original_universities</span>
+
+<span class="n">MODULE_DIR</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span>
+<span class="n">RAW_FILE</span> <span class="o">=</span> <span class="n">MODULE_DIR</span> <span class="o">/</span> <span class="s2">"applicant_data.json"</span>
+<span class="n">CLEANED_FILE</span> <span class="o">=</span> <span class="n">MODULE_DIR</span> <span class="o">/</span> <span class="s2">"llm_extend_applicant_data.json"</span>
+
+
+<div class="viewcode-block" id="read_records">
+<a class="viewcode-back" href="../api.html#pull_data_workflow.read_records">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">read_records</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Read applicant records from a JSON file."""</span>
+    <span class="k">with</span> <span class="n">path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">"r"</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">)</span> <span class="k">as</span> <span class="n">file</span><span class="p">:</span>
+        <span class="n">records</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2"> must contain a list of applicant records."</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">records</span></div>
+
+
+
+<div class="viewcode-block" id="verify_cleaned_prefix">
+<a class="viewcode-back" href="../api.html#pull_data_workflow.verify_cleaned_prefix">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">verify_cleaned_prefix</span><span class="p">(</span><span class="n">raw_records</span><span class="p">,</span> <span class="n">cleaned_records</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Check that the cleaned records match the raw record order."""</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cleaned_records</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_records</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">"The cleaned file contains more records than the raw file."</span>
+        <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">cleaned_record</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cleaned_records</span><span class="p">):</span>
+        <span class="n">raw_record</span> <span class="o">=</span> <span class="n">raw_records</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+
+        <span class="n">raw_id</span> <span class="o">=</span> <span class="n">get_applicant_id</span><span class="p">(</span><span class="n">raw_record</span><span class="p">,</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">cleaned_id</span> <span class="o">=</span> <span class="n">get_applicant_id</span><span class="p">(</span><span class="n">cleaned_record</span><span class="p">,</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">raw_id</span> <span class="o">!=</span> <span class="n">cleaned_id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">"The raw and cleaned JSON files have different "</span>
+                <span class="sa">f</span><span class="s2">"record ordering at position </span><span class="si">{</span><span class="n">index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">. "</span>
+                <span class="s2">"No cleaning or database import was attempted."</span>
+            <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="database_count">
+<a class="viewcode-back" href="../api.html#pull_data_workflow.database_count">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">database_count</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Count applicant records currently stored in PostgreSQL."""</span>
+
+    <span class="k">with</span> <span class="n">connect_to_database</span><span class="p">()</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">connection</span><span class="o">.</span><span class="n">cursor</span><span class="p">()</span> <span class="k">as</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="n">cursor</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="s2">"SELECT COUNT(*) FROM applicants"</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">cursor</span><span class="o">.</span><span class="n">fetchone</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="run_pull_data">
+<a class="viewcode-back" href="../api.html#pull_data_workflow.run_pull_data">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">run_pull_data</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Capture new records, clean them, and import them into PostgreSQL."""</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">RAW_FILE</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">CLEANED_FILE</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+            <span class="s2">"The raw or cleaned applicant JSON file is missing."</span>
+        <span class="p">)</span>
+
+    <span class="n">raw_before</span> <span class="o">=</span> <span class="n">read_records</span><span class="p">(</span><span class="n">RAW_FILE</span><span class="p">)</span>
+    <span class="n">cleaned_before</span> <span class="o">=</span> <span class="n">read_records</span><span class="p">(</span><span class="n">CLEANED_FILE</span><span class="p">)</span>
+
+    <span class="c1"># The cleaning script resumes by record position, so verify</span>
+    <span class="c1"># the existing files before capturing additional records.</span>
+    <span class="n">verify_cleaned_prefix</span><span class="p">(</span><span class="n">raw_before</span><span class="p">,</span> <span class="n">cleaned_before</span><span class="p">)</span>
+
+    <span class="c1"># Uses MAX_PAGES = 2 from capture_page.py during testing.</span>
+    <span class="c1"># Web mode must not wait for terminal input.</span>
+    <span class="n">capture_pages</span><span class="p">(</span><span class="n">web_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">raw_after</span> <span class="o">=</span> <span class="n">read_records</span><span class="p">(</span><span class="n">RAW_FILE</span><span class="p">)</span>
+    <span class="n">newly_saved</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_after</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_before</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">newly_saved</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">"The raw applicant file unexpectedly became smaller."</span>
+        <span class="p">)</span>
+
+    <span class="n">verify_cleaned_prefix</span><span class="p">(</span><span class="n">raw_after</span><span class="p">,</span> <span class="n">cleaned_before</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">newly_saved</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">cleaned_before</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_after</span><span class="p">):</span>
+        <span class="c1"># Keep the supplementary table synchronized even when</span>
+        <span class="c1"># the scraper finds no new applicant records.</span>
+        <span class="n">import_original_universities</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="s2">"Pull Data finished. No new applicant records were found. "</span>
+            <span class="s2">"Original university records were synchronized. "</span>
+            <span class="s2">"No new applicant records were imported."</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Clean newly captured records using the existing workflow.</span>
+    <span class="n">clean_data</span><span class="p">()</span>
+
+    <span class="n">cleaned_after</span> <span class="o">=</span> <span class="n">read_records</span><span class="p">(</span><span class="n">CLEANED_FILE</span><span class="p">)</span>
+    <span class="n">verify_cleaned_prefix</span><span class="p">(</span><span class="n">raw_after</span><span class="p">,</span> <span class="n">cleaned_after</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cleaned_after</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">raw_after</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">"Cleaning did not finish all records. "</span>
+            <span class="s2">"The database import was not started."</span>
+        <span class="p">)</span>
+
+    <span class="n">before_count</span> <span class="o">=</span> <span class="n">database_count</span><span class="p">()</span>
+
+    <span class="c1"># Import cleaned applicant records into the main table.</span>
+    <span class="c1"># Existing applicant IDs are skipped.</span>
+    <span class="n">import_applicants</span><span class="p">()</span>
+
+    <span class="c1"># Import original university names into the supplementary table.</span>
+    <span class="c1"># Existing rows are updated using the original university value.</span>
+    <span class="n">import_original_universities</span><span class="p">()</span>
+
+    <span class="n">after_count</span> <span class="o">=</span> <span class="n">database_count</span><span class="p">()</span>
+    <span class="n">inserted</span> <span class="o">=</span> <span class="n">after_count</span> <span class="o">-</span> <span class="n">before_count</span>
+
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"Pull Data finished. Found </span><span class="si">{</span><span class="n">newly_saved</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> new saved "</span>
+        <span class="sa">f</span><span class="s2">"records and inserted </span><span class="si">{</span><span class="n">inserted</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2"> new database records. "</span>
+        <span class="s2">"Click Update Analysis to view the latest results."</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Shrey Shanbhag.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
