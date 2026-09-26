@@ -1,4 +1,4 @@
-﻿# Module 4 - Internet Documentation, Testing, and Continuous Integration
+# Module 4 - Internet Documentation, Testing, and Continuous Integration
 
 ## Overview
 
@@ -119,7 +119,7 @@ python -m pytest .\module_4\tests -v
 The completed test suite reports:
 
 ```text
-162 passed
+163 passed
 979 statements
 0 missed
 100% coverage
