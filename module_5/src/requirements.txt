@@ -1,0 +1,12 @@
+# Database and ORM
+psycopg[binary]>=3.1,<4
+SQLAlchemy>=2.0,<3
+
+# Flask, scraping, and data capture
+Flask>=2.3,<4
+beautifulsoup4
+websocket-client
+requests
+
+# LLM cleaning dependencies
+-r llm_hosting/requirements.txt

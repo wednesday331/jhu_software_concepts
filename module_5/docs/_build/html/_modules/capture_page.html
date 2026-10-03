@@ -1,0 +1,635 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>capture_page &mdash; GradCafe Analytics 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            GradCafe Analytics
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../testing.html">Testing Guide</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">GradCafe Analytics</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">capture_page</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for capture_page</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">subprocess</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">urllib.request</span><span class="w"> </span><span class="kn">import</span> <span class="n">urlopen</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">websocket</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">scrape</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">parse_survey_page</span><span class="p">,</span> <span class="n">save_data</span>
+
+
+<span class="n">DEBUG_PORT</span> <span class="o">=</span> <span class="mi">9222</span>
+<span class="n">BASE_URL</span> <span class="o">=</span> <span class="s2">"https://www.thegradcafe.com"</span>
+<span class="n">OUTPUT_FILE</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"applicant_data.json"</span><span class="p">)</span>
+<span class="n">PROFILE_FOLDER</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"chrome_capture_profile"</span><span class="p">)</span>
+
+<span class="c1"># Keep this small while validating the optimized workflow.</span>
+<span class="n">MAX_PAGES</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="c1"># Polite pause between normal public pages.</span>
+<span class="n">PAGE_DELAY_SECONDS</span> <span class="o">=</span> <span class="mi">4</span>
+
+<span class="c1"># Save applicant_data.json every N newly captured pages.</span>
+<span class="c1"># Each HTML page is still saved immediately, so if the program is interrupted</span>
+<span class="c1"># before the next JSON checkpoint, scrape.py can rebuild the missing records.</span>
+<span class="n">SAVE_EVERY_PAGES</span> <span class="o">=</span> <span class="mi">25</span>
+
+
+<span class="n">CHROME_PATHS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">Path</span><span class="p">(</span><span class="sa">r</span><span class="s2">"C:\Program Files\Google\Chrome\Application\chrome.exe"</span><span class="p">),</span>
+    <span class="n">Path</span><span class="p">(</span><span class="sa">r</span><span class="s2">"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"</span><span class="p">),</span>
+    <span class="n">Path</span><span class="o">.</span><span class="n">home</span><span class="p">()</span> <span class="o">/</span> <span class="sa">r</span><span class="s2">"AppData\Local\Google\Chrome\Application\chrome.exe"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_chrome</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Find the Chrome executable on Windows."""</span>
+    <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">CHROME_PATHS</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">path</span>
+
+    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+        <span class="s2">"Google Chrome could not be found in the expected locations."</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_start_chrome</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Start a separate Chrome window with remote debugging enabled."""</span>
+    <span class="n">chrome_path</span> <span class="o">=</span> <span class="n">_find_chrome</span><span class="p">()</span>
+    <span class="n">profile_path</span> <span class="o">=</span> <span class="n">PROFILE_FOLDER</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+
+    <span class="n">command</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">chrome_path</span><span class="p">),</span>
+        <span class="sa">f</span><span class="s2">"--remote-debugging-port=</span><span class="si">{</span><span class="n">DEBUG_PORT</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="sa">f</span><span class="s2">"--user-data-dir=</span><span class="si">{</span><span class="n">profile_path</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="s2">"--remote-allow-origins=http://127.0.0.1:9222"</span><span class="p">,</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">BASE_URL</span><span class="si">}</span><span class="s2">/survey/"</span><span class="p">,</span>
+    <span class="p">]</span>
+
+    <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span><span class="n">command</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Starting a separate Chrome capture window..."</span><span class="p">)</span>
+    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_tabs</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Return the Chrome tabs exposed through the debugging port."""</span>
+    <span class="k">with</span> <span class="n">urlopen</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"http://127.0.0.1:</span><span class="si">{</span><span class="n">DEBUG_PORT</span><span class="si">}</span><span class="s2">/json"</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_gradcafe_tab</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Find the open GradCafe survey tab."""</span>
+    <span class="n">tabs</span> <span class="o">=</span> <span class="n">_get_tabs</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">tab</span> <span class="ow">in</span> <span class="n">tabs</span><span class="p">:</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="n">tab</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="s2">"thegradcafe.com/survey"</span> <span class="ow">in</span> <span class="n">url</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tab</span>
+
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_gradcafe_tab</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">poll_interval</span><span class="o">=</span><span class="mf">0.25</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Wait briefly for the GradCafe tab to reappear after navigation."""</span>
+    <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span> <span class="o">&lt;</span> <span class="n">timeout</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">tab</span> <span class="o">=</span> <span class="n">_find_gradcafe_tab</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">tab</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">tab</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">poll_interval</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_send_cdp</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="n">method</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Send one Chrome DevTools Protocol command."""</span>
+    <span class="n">socket</span> <span class="o">=</span> <span class="n">websocket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span>
+        <span class="n">tab</span><span class="p">[</span><span class="s2">"webSocketDebuggerUrl"</span><span class="p">],</span>
+        <span class="n">origin</span><span class="o">=</span><span class="sa">f</span><span class="s2">"http://127.0.0.1:</span><span class="si">{</span><span class="n">DEBUG_PORT</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"id"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="s2">"method"</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="n">params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">message</span><span class="p">[</span><span class="s2">"params"</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span>
+
+        <span class="n">socket</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">message</span><span class="p">))</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">recv</span><span class="p">())</span>
+
+            <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id"</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">response</span>
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">socket</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_capture_html</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">retry_delay</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Capture rendered HTML, retrying briefly during page transitions."""</span>
+    <span class="n">last_error</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">retries</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">_send_cdp</span><span class="p">(</span>
+                <span class="n">tab</span><span class="p">,</span>
+                <span class="s2">"Runtime.evaluate"</span><span class="p">,</span>
+                <span class="p">{</span>
+                    <span class="s2">"expression"</span><span class="p">:</span> <span class="s2">"document.documentElement.outerHTML"</span><span class="p">,</span>
+                    <span class="s2">"returnByValue"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+
+            <span class="n">value</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">response</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"result"</span><span class="p">,</span> <span class="p">{})</span>
+                <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"result"</span><span class="p">,</span> <span class="p">{})</span>
+                <span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"value"</span><span class="p">)</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">value</span>
+
+            <span class="n">last_error</span> <span class="o">=</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">"Chrome returned a temporary Runtime.evaluate response "</span>
+                <span class="s2">"without HTML."</span>
+            <span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">last_error</span> <span class="o">=</span> <span class="n">exc</span>
+
+        <span class="k">if</span> <span class="n">attempt</span> <span class="o">&lt;</span> <span class="n">retries</span><span class="p">:</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">retry_delay</span><span class="p">)</span>
+
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"Could not capture page HTML after </span><span class="si">{</span><span class="n">retries</span><span class="si">}</span><span class="s2"> attempts."</span>
+    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">last_error</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_navigate</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Navigate the existing Chrome tab to a normal public URL."""</span>
+    <span class="n">_send_cdp</span><span class="p">(</span>
+        <span class="n">tab</span><span class="p">,</span>
+        <span class="s2">"Page.navigate"</span><span class="p">,</span>
+        <span class="p">{</span>
+            <span class="s2">"url"</span><span class="p">:</span> <span class="n">url</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_result_urls</span><span class="p">(</span><span class="n">html</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Extract GradCafe result URLs from the rendered survey page."""</span>
+    <span class="n">result_ids</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="sa">r</span><span class="s1">'/result/(\d+)'</span><span class="p">,</span> <span class="n">html</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">BASE_URL</span><span class="si">}</span><span class="s2">/result/</span><span class="si">{</span><span class="n">result_id</span><span class="si">}</span><span class="s2">"</span>
+        <span class="k">for</span> <span class="n">result_id</span> <span class="ow">in</span> <span class="n">result_ids</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_next_filename</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">"""Choose the next survey_page_N.html filename."""</span>
+    <span class="n">existing</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"."</span><span class="p">)</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"survey_page*.html"</span><span class="p">))</span>
+    <span class="n">highest_number</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">existing</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">"survey_page.html"</span><span class="p">:</span>
+            <span class="n">highest_number</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">highest_number</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span>
+            <span class="sa">r</span><span class="s2">"survey_page_(\d+)\.html"</span><span class="p">,</span>
+            <span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+            <span class="n">highest_number</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
+                <span class="n">highest_number</span><span class="p">,</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="sa">f</span><span class="s2">"survey_page_</span><span class="si">{</span><span class="n">highest_number</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.html"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_find_next_url</span><span class="p">(</span><span class="n">html</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Find the normal next-page survey URL.</span>
+
+<span class="sd">    GradCafe uses cursor-based pagination.</span>
+<span class="sd">    """</span>
+    <span class="n">links</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span>
+        <span class="sa">r</span><span class="s1">'href=["</span><span class="se">\'</span><span class="s1">]([^"</span><span class="se">\'</span><span class="s1">]*survey\?cursor=[^"</span><span class="se">\'</span><span class="s1">]+)["</span><span class="se">\'</span><span class="s1">]'</span><span class="p">,</span>
+        <span class="n">html</span><span class="p">,</span>
+        <span class="n">flags</span><span class="o">=</span><span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">links</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="c1"># This worked correctly in the 10-page test.</span>
+    <span class="n">next_url</span> <span class="o">=</span> <span class="n">links</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">next_url</span> <span class="o">=</span> <span class="n">next_url</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">"&amp;amp;"</span><span class="p">,</span> <span class="s2">"&amp;"</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">next_url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"/"</span><span class="p">):</span>
+        <span class="n">next_url</span> <span class="o">=</span> <span class="n">BASE_URL</span> <span class="o">+</span> <span class="n">next_url</span>
+
+    <span class="k">elif</span> <span class="n">next_url</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"survey"</span><span class="p">):</span>
+        <span class="n">next_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">BASE_URL</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">next_url</span><span class="si">}</span><span class="s2">"</span>
+
+    <span class="k">return</span> <span class="n">next_url</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_looks_blocked</span><span class="p">(</span><span class="n">html</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Detect obvious verification/block pages.</span>
+
+<span class="sd">    IMPORTANT:</span>
+<span class="sd">    We stop. We do not attempt to solve or bypass them.</span>
+<span class="sd">    """</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">html</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="n">blocked_phrases</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">"verify you are human"</span><span class="p">,</span>
+        <span class="s2">"verification required"</span><span class="p">,</span>
+        <span class="s2">"checking your browser"</span><span class="p">,</span>
+        <span class="s2">"challenge-platform"</span><span class="p">,</span>
+        <span class="s2">"cf-chl"</span><span class="p">,</span>
+        <span class="s2">"access denied"</span><span class="p">,</span>
+        <span class="s2">"too many requests"</span><span class="p">,</span>
+        <span class="s2">"rate limit"</span><span class="p">,</span>
+    <span class="p">]</span>
+
+    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
+        <span class="n">phrase</span> <span class="ow">in</span> <span class="n">text</span>
+        <span class="k">for</span> <span class="n">phrase</span> <span class="ow">in</span> <span class="n">blocked_phrases</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_results</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Wait until an ordinary survey results page is visible."""</span>
+    <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+    <span class="k">while</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span> <span class="o">&lt;</span> <span class="n">timeout</span><span class="p">:</span>
+        <span class="n">html</span> <span class="o">=</span> <span class="n">_capture_html</span><span class="p">(</span><span class="n">tab</span><span class="p">)</span>
+        <span class="n">result_urls</span> <span class="o">=</span> <span class="n">_get_result_urls</span><span class="p">(</span><span class="n">html</span><span class="p">)</span>
+
+        <span class="c1"># Real applicant links take priority over harmless Cloudflare strings</span>
+        <span class="c1"># that may remain in an otherwise normal page.</span>
+        <span class="k">if</span> <span class="n">result_urls</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">html</span>
+
+        <span class="k">if</span> <span class="n">_looks_blocked</span><span class="p">(</span><span class="n">html</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">html</span>
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">_capture_html</span><span class="p">(</span><span class="n">tab</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_append_page_records</span><span class="p">(</span><span class="n">html</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">existing_urls</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Parse only the newly captured page and append unseen records in memory.</span>
+
+<span class="sd">    This avoids rerunning scrape.py and reparsing every older HTML page after</span>
+<span class="sd">    every capture.</span>
+<span class="sd">    """</span>
+    <span class="n">page_records</span> <span class="o">=</span> <span class="n">parse_survey_page</span><span class="p">(</span><span class="n">html</span><span class="p">)</span>
+
+    <span class="n">added</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">page_records</span><span class="p">:</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">url</span> <span class="ow">and</span> <span class="n">url</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">existing_urls</span><span class="p">:</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">record</span><span class="p">)</span>
+            <span class="n">existing_urls</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+            <span class="n">added</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">page_records</span><span class="p">),</span> <span class="n">added</span>
+
+
+<div class="viewcode-block" id="capture_pages">
+<a class="viewcode-back" href="../api.html#capture_page.capture_pages">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">capture_pages</span><span class="p">(</span><span class="n">web_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Capture a batch of ordinary public GradCafe pages.</span>
+
+<span class="sd">    Cloudflare verification remains manual.</span>
+<span class="sd">    The program stops rather than bypassing verification/blocking.</span>
+<span class="sd">    """</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">tab</span> <span class="o">=</span> <span class="n">_find_gradcafe_tab</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">tab</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">web_mode</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tab</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">"Open your GradCafe Chrome capture window, complete any "</span>
+                <span class="s2">"verification manually, and navigate to a survey page "</span>
+                <span class="s2">"showing applicant results. Then click Pull Data again."</span>
+            <span class="p">)</span>
+
+        <span class="n">html</span> <span class="o">=</span> <span class="n">_wait_for_results</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_get_result_urls</span><span class="p">(</span><span class="n">html</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">"GradCafe applicant results are not visible in Chrome. "</span>
+                <span class="s2">"Complete any verification manually, wait for the "</span>
+                <span class="s2">"results to appear, and click Pull Data again."</span>
+            <span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"GradCafe results are visible. Starting web capture."</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tab</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"A compatible Chrome window was not found."</span><span class="p">)</span>
+            <span class="n">_start_chrome</span><span class="p">()</span>
+
+            <span class="nb">print</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"Chrome started."</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"In the Chrome window:"</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"1. Complete any Cloudflare verification manually."</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"2. Go to the GradCafe survey page where you want to resume."</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"3. Make sure applicant results are visible."</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"4. Return here and press Enter."</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">()</span>
+
+            <span class="nb">input</span><span class="p">(</span>
+                <span class="s2">"After the GradCafe page is fully loaded, "</span>
+                <span class="s2">"press Enter here..."</span>
+            <span class="p">)</span>
+
+            <span class="n">tab</span> <span class="o">=</span> <span class="n">_find_gradcafe_tab</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">tab</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"Could not find the GradCafe survey tab."</span><span class="p">)</span>
+                <span class="k">return</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"Found the existing GradCafe Chrome window."</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="s2">"Make sure the Chrome window is on the "</span>
+                <span class="s2">"survey page where you want to resume."</span>
+            <span class="p">)</span>
+
+            <span class="nb">input</span><span class="p">(</span>
+                <span class="s2">"When the results are visible, "</span>
+                <span class="s2">"press Enter here..."</span>
+            <span class="p">)</span>
+
+    <span class="c1"># Load the accumulated JSON only once for this whole run.</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">()</span>
+    <span class="n">existing_urls</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">data</span>
+        <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"url"</span><span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="nb">print</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Currently saved records: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">existing_urls</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Automatic test limit: </span><span class="si">{</span><span class="n">MAX_PAGES</span><span class="si">}</span><span class="s2"> pages"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">()</span>
+
+    <span class="n">captured_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">unsaved_pages</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">batch_number</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">MAX_PAGES</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+
+            <span class="c1"># Refresh tab metadata because its URL changes as we paginate.</span>
+            <span class="c1"># Chrome can briefly omit the tab from the debugging endpoint during</span>
+            <span class="c1"># navigation, so retry for a few seconds instead of stopping immediately.</span>
+            <span class="n">tab</span> <span class="o">=</span> <span class="n">_wait_for_gradcafe_tab</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">tab</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"The GradCafe tab could not be found after retrying. Stopping."</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Batch page </span><span class="si">{</span><span class="n">batch_number</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">MAX_PAGES</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Current URL: </span><span class="si">{</span><span class="n">tab</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'url'</span><span class="p">,</span><span class="w"> </span><span class="s1">''</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+            <span class="n">html</span> <span class="o">=</span> <span class="n">_wait_for_results</span><span class="p">(</span><span class="n">tab</span><span class="p">)</span>
+            <span class="n">result_urls</span> <span class="o">=</span> <span class="n">_get_result_urls</span><span class="p">(</span><span class="n">html</span><span class="p">)</span>
+
+            <span class="c1"># NEVER continue through a challenge page.</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">result_urls</span> <span class="ow">and</span> <span class="n">_looks_blocked</span><span class="p">(</span><span class="n">html</span><span class="p">):</span>
+                <span class="nb">print</span><span class="p">()</span>
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="s2">"GradCafe appears to be requesting verification "</span>
+                    <span class="s2">"or blocking the request."</span>
+                <span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"Stopping automatically."</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">result_urls</span><span class="p">)</span><span class="si">}</span><span class="s2"> result links."</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">result_urls</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"No applicant results were found. Stopping."</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="n">new_urls</span> <span class="o">=</span> <span class="n">result_urls</span> <span class="o">-</span> <span class="n">existing_urls</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"New results on page: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">new_urls</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="s2">"Already saved from this page: "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">result_urls</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">new_urls</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">new_urls</span><span class="p">:</span>
+                <span class="c1"># Save the raw rendered page immediately for traceability</span>
+                <span class="c1"># and recovery if the program is interrupted.</span>
+                <span class="n">filename</span> <span class="o">=</span> <span class="n">_next_filename</span><span class="p">()</span>
+                <span class="n">filename</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
+                    <span class="n">html</span><span class="p">,</span>
+                    <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8"</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Saved as </span><span class="si">{</span><span class="n">filename</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+                <span class="n">parsed_count</span><span class="p">,</span> <span class="n">added_count</span> <span class="o">=</span> <span class="n">_append_page_records</span><span class="p">(</span>
+                    <span class="n">html</span><span class="p">,</span>
+                    <span class="n">data</span><span class="p">,</span>
+                    <span class="n">existing_urls</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Parsed </span><span class="si">{</span><span class="n">parsed_count</span><span class="si">}</span><span class="s2"> applicant records "</span>
+                    <span class="sa">f</span><span class="s2">"from </span><span class="si">{</span><span class="n">filename</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Added </span><span class="si">{</span><span class="n">added_count</span><span class="si">}</span><span class="s2"> new records in memory."</span>
+                <span class="p">)</span>
+
+                <span class="n">captured_count</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">unsaved_pages</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="c1"># Checkpoint the JSON periodically instead of rewriting the</span>
+                <span class="c1"># growing file after every single page.</span>
+                <span class="k">if</span> <span class="n">unsaved_pages</span> <span class="o">&gt;=</span> <span class="n">SAVE_EVERY_PAGES</span><span class="p">:</span>
+                    <span class="n">save_data</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+                    <span class="n">unsaved_pages</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="nb">print</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Checkpoint saved: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2"> total records "</span>
+                        <span class="sa">f</span><span class="s2">"in applicant_data.json."</span>
+                    <span class="p">)</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span>
+                    <span class="s2">"This page is already present in "</span>
+                    <span class="s2">"applicant_data.json."</span>
+                <span class="p">)</span>
+
+            <span class="n">next_url</span> <span class="o">=</span> <span class="n">_find_next_url</span><span class="p">(</span><span class="n">html</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">next_url</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">()</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"Could not locate the normal next-page URL."</span><span class="p">)</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s2">"Stopping."</span><span class="p">)</span>
+                <span class="k">break</span>
+
+            <span class="nb">print</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Waiting </span><span class="si">{</span><span class="n">PAGE_DELAY_SECONDS</span><span class="si">}</span><span class="s2"> seconds "</span>
+                <span class="s2">"before the next page..."</span>
+            <span class="p">)</span>
+
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">PAGE_DELAY_SECONDS</span><span class="p">)</span>
+
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Navigating to: </span><span class="si">{</span><span class="n">next_url</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="n">_navigate</span><span class="p">(</span><span class="n">tab</span><span class="p">,</span> <span class="n">next_url</span><span class="p">)</span>
+
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="c1"># Always save any records accumulated since the previous checkpoint,</span>
+        <span class="c1"># including when the run stops because of an error or verification.</span>
+        <span class="k">if</span> <span class="n">unsaved_pages</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">save_data</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Final checkpoint saved: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2"> total records "</span>
+                <span class="sa">f</span><span class="s2">"in applicant_data.json."</span>
+            <span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"="</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"Capture run finished."</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"New HTML pages captured: </span><span class="si">{</span><span class="n">captured_count</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Records currently in applicant_data.json: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">"__main__"</span><span class="p">:</span>
+    <span class="n">capture_pages</span><span class="p">()</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Shrey Shanbhag.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
