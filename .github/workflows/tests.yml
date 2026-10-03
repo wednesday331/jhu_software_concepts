@@ -1,4 +1,4 @@
-name: Module 4 Tests
+name: Module 5 CI
 
 on:
   push:
@@ -31,6 +31,10 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: postgres
 
+    defaults:
+      run:
+        working-directory: module_5
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -40,20 +44,41 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install CI dependencies
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install \
-            "psycopg[binary]>=3.1,<4" \
-            "SQLAlchemy>=2.0,<3" \
-            "Flask>=2.3,<4" \
-            beautifulsoup4 \
-            websocket-client \
-            requests \
-            huggingface_hub \
-            pytest \
-            pytest-cov
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
 
-      - name: Run Module 4 test suite
+      - name: Verify installed dependencies
         run: |
-          python -m pytest ./module_4/tests -v
+          python -m pip check
+
+      - name: Run Pylint
+        run: |
+          py_files=$(find src -type f -name "*.py")
+          pylint --fail-under=10.0 $py_files
+
+      - name: Generate dependency graph
+        run: |
+          pydeps ./src --noshow -o dependency.svg
+          test -s dependency.svg
+
+      - name: Run Pytest
+        run: |
+          pytest
+
+      - name: Install Snyk CLI
+        run: |
+          npm install -g snyk
+
+      - name: Run Snyk dependency scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk test --file=requirements.txt --package-manager=pip

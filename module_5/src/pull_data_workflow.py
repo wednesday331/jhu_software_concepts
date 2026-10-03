@@ -1,4 +1,3 @@
-
 """Capture, clean, and import GradCafe applicant records."""
 
 import json
@@ -58,7 +57,13 @@ def database_count():
 
     with connect_to_database() as connection:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT COUNT(*) FROM applicants")
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM applicants
+                LIMIT 1;
+                """
+            )
             return cursor.fetchone()[0]
 
 

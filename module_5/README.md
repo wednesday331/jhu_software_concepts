@@ -1,23 +1,30 @@
-# Module 4 - Internet Documentation, Testing, and Continuous Integration
+# Module 5 - Software Security, Dependency Analysis, and Packaging
 
 ## Overview
 
-This module extends the GradCafe Analytics application from Module 3.
+This module extends the GradCafe Analytics application developed in the
+previous modules.
 
-The application collects and processes GradCafe applicant data, stores the
+The application collects and cleans GradCafe applicant data, stores the
 records in PostgreSQL, analyzes them using raw SQL and SQLAlchemy ORM, and
-displays the results through a Flask webpage.
+displays the results through a Flask web application.
 
-Module 4 adds:
+Module 5 adds:
 
-- automated testing with Pytest
-- 100% source-code coverage
-- dependency injection for testability
-- deterministic mocks, fakes, fixtures, and test doubles
-- stable HTML selectors for automated UI testing
-- GitHub Actions continuous integration
-- Sphinx-generated documentation
-- published documentation through Read the Docs
+- Pylint static analysis with a 10.00/10 project score
+- SQL injection defenses and parameterized database access
+- bounded SQL query result limits
+- tests for malicious SQL input
+- PostgreSQL least-privilege database access
+- environment-based database credentials
+- `.env.example` configuration documentation
+- pydeps and Graphviz dependency analysis
+- `dependency.svg`
+- reproducible installation with pip and uv
+- setuptools project configuration through `setup.py`
+
+The project retains the automated testing, 100% coverage, Flask application,
+Sphinx documentation, and continuous integration work from Module 4.
 
 ## Repository
 
@@ -27,70 +34,224 @@ GitHub SSH URL:
 git@github.com:wednesday331/jhu_software_concepts.git
 ```
 
-## Installation
+## Requirements
 
-The project uses Python 3.11 and PostgreSQL.
+The project uses:
 
-From the repository root:
+- Python 3.11
+- PostgreSQL
+- Graphviz
+- Python packages listed in `requirements.txt`
+
+Graphviz is a system dependency rather than a Python package.
+
+On Windows it can be installed with:
 
 ```powershell
-python -m pip install -r .\module_4\requirements.txt
+winget install --id Graphviz.Graphviz -e
 ```
 
-The optional local LLM component has additional dependencies under:
+Verify the installation with:
 
-```text
-module_4/src/llm_hosting/
+```powershell
+dot -V
 ```
 
-The production LLM is not required for the normal test suite, GitHub Actions,
-or Sphinx documentation.
+## Fresh Installation with pip
+
+From `module_5`:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e .
+```
+
+Verify installed dependencies:
+
+```powershell
+python -m pip check
+```
+
+## Fresh Installation with uv
+
+If uv is not already installed:
+
+```powershell
+python -m pip install uv
+```
+
+Create and activate a Python 3.11 environment:
+
+```powershell
+uv venv .venv --python 3.11
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the requirements and project:
+
+```powershell
+uv pip install -r requirements.txt
+uv pip install -e .
+```
 
 ## PostgreSQL Configuration
 
-The PostgreSQL database is named `gradcafe`.
+The PostgreSQL database is named:
 
-Direct Psycopg scripts such as `load_data.py` use the standard PostgreSQL
-environment variables. The Flask and SQLAlchemy components use `DATABASE_URL`.
+```text
+gradcafe
+```
+
+The application uses a dedicated least-privilege PostgreSQL role:
+
+```text
+gradcafe_app
+```
+
+The application role is not a PostgreSQL superuser and cannot create
+databases, create roles, create schema objects, replicate, bypass row-level
+security, or delete application records.
+
+For the `applicants` table, the application account has only:
+
+```text
+SELECT
+INSERT
+```
+
+For `applicant_original_universities`, the application account has:
+
+```text
+SELECT
+INSERT
+UPDATE
+```
+
+`UPDATE` is required on the supplementary university table because the loader
+uses PostgreSQL `ON CONFLICT ... DO UPDATE`.
+
+The application account does not have `DELETE` permission on either table.
+
+## Environment Variables
+
+Database credentials are not stored in the Python source code.
+
+The file:
+
+```text
+.env.example
+```
+
+documents the required variables using placeholder values only.
+
+Direct Psycopg scripts use:
+
+```text
+PGHOST
+PGPORT
+PGDATABASE
+PGUSER
+PGPASSWORD
+```
+
+SQLAlchemy uses:
+
+```text
+DATABASE_URL
+```
 
 Example PowerShell configuration:
 
 ```powershell
-$password = Read-Host "PostgreSQL password" -AsSecureString
-$plainPassword = [System.Net.NetworkCredential]::new("", $password).Password
+$password = Read-Host "gradcafe_app password" -AsSecureString
+$plainPassword = [System.Net.NetworkCredential]::new(
+    "",
+    $password
+).Password
 $encodedPassword = [System.Uri]::EscapeDataString($plainPassword)
 
 $env:PGHOST = "localhost"
 $env:PGPORT = "5432"
 $env:PGDATABASE = "gradcafe"
-$env:PGUSER = "postgres"
+$env:PGUSER = "gradcafe_app"
 $env:PGPASSWORD = $plainPassword
 
-$env:DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/gradcafe"
+$env:DATABASE_URL = (
+    "postgresql+psycopg://gradcafe_app:" +
+    "$encodedPassword@localhost:5432/gradcafe"
+)
 ```
 
-Do not store the real PostgreSQL password in source code or commit it to GitHub.
+Do not store a real database password in `.env.example`, source code, or
+GitHub.
 
-## Loading the Database
+A local `.env` file is excluded by `.gitignore`.
 
-From the repository root:
+## Database Loading
+
+The database schema must be provisioned before the application loader runs.
+
+The runtime application account intentionally does not have permission to
+create or alter the PostgreSQL schema.
+
+From `module_5`:
 
 ```powershell
-cd .\module_4\src
-python load_data.py
-python load_original_universities.py
+python .\src\load_data.py
+python .\src\load_original_universities.py
 ```
 
 The current dataset contains 30,384 applicant records.
 
-## Running the Flask Application
+## SQL Security
 
-Make sure PostgreSQL is running and the required environment variables are set.
+Raw SQL values are passed through Psycopg parameter binding rather than being
+concatenated directly into SQL strings.
 
-From `module_4/src`:
+Dynamic SQL identifiers are restricted to an allowlist and composed using:
+
+```text
+psycopg.sql.SQL
+psycopg.sql.Identifier
+```
+
+User-controlled query limits are clamped to the supported range of 1 through
+100.
+
+The test suite includes malicious SQL input intended to verify that values
+such as SQL injection payloads remain query parameters rather than executable
+SQL structure.
+
+SQLAlchemy ORM queries also include explicit result limits where appropriate.
+
+## Running the SQL Analyses
+
+Raw Psycopg analysis:
 
 ```powershell
-python app.py
+python .\src\query_data.py
+```
+
+SQLAlchemy ORM analysis:
+
+```powershell
+python .\src\orm_queries.py
+```
+
+The two implementations produce matching analysis results.
+
+## Running the Flask Application
+
+Make sure PostgreSQL is running and the required environment variables are
+set.
+
+From `module_5`:
+
+```powershell
+python .\src\app.py
 ```
 
 The webpage provides:
@@ -98,122 +259,109 @@ The webpage provides:
 - **Update Analysis** - refreshes the displayed analysis
 - **Pull Data** - starts the GradCafe data collection workflow
 
-The Flask application uses a `create_app()` application factory so tests can
-override database sessions, analysis queries, and the Pull Data workflow.
-
-Stable selectors include:
-
-```text
-data-testid="pull-data-btn"
-data-testid="update-analysis-btn"
-```
+The Flask application uses a `create_app()` application factory to support
+dependency injection during testing.
 
 ## Automated Testing
 
-From the repository root:
+Run:
 
 ```powershell
-python -m pytest .\module_4\tests -v
+pytest
 ```
 
-The completed test suite reports:
+The current completed test suite reports:
 
 ```text
-163 passed
-979 statements
+165 passed
+1 skipped
+988 statements
 0 missed
 100% coverage
-```
-
-The rubric marker command also passes with 100% coverage:
-
-```powershell
-python -m pytest .\module_4\tests -m "web or buttons or analysis or db or integration"
 ```
 
 Coverage configuration is defined in:
 
 ```text
-module_4/pytest.ini
+pytest.ini
 ```
 
-Coverage proof is stored in:
+## Pylint
+
+Run Pylint against every Python file under `src` with:
+
+```powershell
+$pyFiles = Get-ChildItem .\src -Recurse -Filter *.py |
+    ForEach-Object { $_.FullName }
+
+pylint $pyFiles
+```
+
+The current project rating is:
 
 ```text
-module_4/coverage_summary.txt
+10.00/10
 ```
 
-## GitHub Actions
+## Dependency Analysis
 
-Continuous integration is configured in:
+Python module dependencies are analyzed with pydeps and rendered with
+Graphviz.
+
+Generate the dependency graph from `module_5` with:
+
+```powershell
+pydeps .\src --noshow -o dependency.svg
+```
+
+The generated dependency diagram is:
 
 ```text
-.github/workflows/tests.yml
+dependency.svg
 ```
 
-The workflow starts PostgreSQL, configures the test database environment,
-installs dependencies, and runs the complete Pytest suite with the 100%
-coverage requirement.
-
-Proof of the successful GitHub Actions run is included in:
-
-```text
-module_4/actions_success.png
-```
+The dependency graph shows how the major Python modules in the application
+interact with one another. The Flask application acts as an orchestration
+layer, using the database models and ORM query functions to generate analysis
+results and invoking the pull-data workflow when new applicant data is
+requested. The `pull_data_workflow` module coordinates several lower-level
+modules, including data capture, cleaning, PostgreSQL loading, and
+original-university loading. The `orm_queries` module depends on `models` for
+the SQLAlchemy models and database session management, keeping query logic
+separate from the database model definitions. The data-loading modules are
+also reused rather than duplicating database connection and data-processing
+logic, which reduces unnecessary coupling and repeated code. Overall, the
+dependency graph reflects a layered design in which the web interface
+coordinates the workflow while specialized modules handle scraping,
+cleaning, database access, and analysis.
 
 ## Sphinx Documentation
 
-The Sphinx source files are located in:
+Documentation source files are stored in:
 
 ```text
-module_4/docs/
+docs/
 ```
 
-The documentation includes:
-
-- setup and environment-variable instructions
-- architecture documentation
-- web, ETL, and database layers
-- API/autodoc documentation
-- testing guidance
-- Pytest markers
-- stable selectors
-- fixtures and test doubles
-
-Build the documentation from the repository root with:
+Build the documentation from `module_5` with:
 
 ```powershell
-python -m sphinx -W -b html .\module_4\docs .\module_4\docs\_build\html
+python -m sphinx -W -b html .\docs .\docs\_build\html
 ```
 
-Generated HTML is stored in:
+## Main Module 5 Deliverables
 
-```text
-module_4/docs/_build/html/
-```
-
-## Published Documentation
-
-The Sphinx documentation is published through Read the Docs.
-
-Published documentation:
-
-https://wednesday331-jhu-software-concepts.readthedocs.io/en/latest/
-
-Read the Docs configuration is defined in:
-
-```text
-.readthedocs.yaml
-```
-
-## Main Deliverables
-
-- GitHub repository SSH URL
-- `module_4/README.md`
-- `module_4/requirements.txt`
-- Sphinx-generated HTML under `module_4/docs/_build/html`
-- `module_4/coverage_summary.txt`
-- `module_4/actions_success.png`
-- `.github/workflows/tests.yml`
-- published Read the Docs documentation
-- all required tests under `module_4/tests`
+- `README.md`
+- `requirements.txt`
+- `setup.py`
+- `.env.example`
+- `.gitignore`
+- `dependency.svg`
+- secured raw SQL implementation
+- secured SQLAlchemy ORM implementation
+- least-privilege PostgreSQL configuration
+- SQL injection security tests
+- complete Pytest suite
+- 100% test coverage
+- Pylint 10.00/10
+- Sphinx documentation

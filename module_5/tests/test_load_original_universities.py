@@ -184,10 +184,12 @@ def test_main_loads_original_universities(
         in cursor.executemany_sql
     )
 
+    normalized_sql = " ".join(cursor.executed_sql.split())
+
     assert (
         "SELECT COUNT(*) FROM "
-        "applicant_original_universities"
-        in cursor.executed_sql
+        "applicant_original_universities LIMIT 1;"
+        in normalized_sql
     )
 
     output = capsys.readouterr().out

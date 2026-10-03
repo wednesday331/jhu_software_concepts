@@ -1,19 +1,41 @@
-
 """
-Module 3: SQL Query Analysis
+Module 5: SQL Query Analysis
 
 Answers the nine required SQL questions using PostgreSQL
 and Psycopg 3.
 
 All analysis is performed in SQL. Python executes the queries
 and formats their results for console output.
-"""
-# pylint: disable=duplicate-code
 
+Security controls:
+- User values are passed through Psycopg parameters.
+- Dynamic SQL identifiers use psycopg.sql.Identifier.
+- User-controlled result limits are clamped to 1-100.
+- Analysis SELECT statements include explicit LIMIT clauses.
+"""
+
+# pylint: disable=duplicate-code
 
 import os
 
 import psycopg
+from psycopg import sql as psycopg_sql
+
+
+MAX_QUERY_LIMIT = 100
+DEFAULT_QUERY_LIMIT = 25
+
+ALLOWED_SEARCH_COLUMNS = frozenset(
+    {
+        "program",
+        "status",
+        "term",
+        "us_or_international",
+        "degree",
+        "llm_generated_program",
+        "llm_generated_university",
+    }
+)
 
 
 def connect_to_database():
@@ -34,6 +56,53 @@ def fetch_one(connection, sql):
         return cursor.fetchone()
 
 
+def clamp_limit(requested_limit):
+    """Return a query limit constrained to the inclusive range 1-100."""
+    try:
+        parsed_limit = int(requested_limit)
+    except (TypeError, ValueError):
+        parsed_limit = DEFAULT_QUERY_LIMIT
+
+    return max(1, min(parsed_limit, MAX_QUERY_LIMIT))
+
+
+def search_applicants(
+    connection,
+    column_name,
+    value,
+    limit=DEFAULT_QUERY_LIMIT,
+):
+    """Safely search an allowed applicant column using a bounded result limit."""
+    if column_name not in ALLOWED_SEARCH_COLUMNS:
+        raise ValueError(f"Unsupported search column: {column_name}")
+
+    safe_limit = clamp_limit(limit)
+
+    query = psycopg_sql.SQL(
+        """
+        SELECT
+            p_id,
+            program,
+            status,
+            term,
+            degree
+        FROM applicants
+        WHERE {} = %s
+        ORDER BY p_id
+        LIMIT %s;
+        """
+    ).format(
+        psycopg_sql.Identifier(column_name)
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            query,
+            (value, safe_limit),
+        )
+        return cursor.fetchall()
+
+
 def format_average(value):
     """Format an average to two decimal places."""
     return f"{value:.2f}" if value is not None else "N/A"
@@ -50,12 +119,14 @@ def format_percentage(value):
 # Fall 2026?
 # ---------------------------------------------------------
 
+
 def question_1(connection):
     """Print the Fall 2026 applicant count."""
     sql = """
         SELECT COUNT(*)
         FROM applicants
-        WHERE LOWER(TRIM(term)) = 'fall 2026';
+        WHERE LOWER(TRIM(term)) = 'fall 2026'
+        LIMIT 1;
     """
 
     count = fetch_one(connection, sql)[0]
@@ -68,6 +139,7 @@ def question_1(connection):
 # What percentage of applicants with a usable nationality
 # classification are international?
 # ---------------------------------------------------------
+
 
 def question_2(connection):
     """Print the percentage of classified applicants who are international."""
@@ -82,7 +154,8 @@ def question_2(connection):
                 ),
                 0
             )
-        FROM applicants;
+        FROM applicants
+        LIMIT 1;
     """
 
     percentage = fetch_one(connection, sql)[0]
@@ -123,7 +196,8 @@ def question_3(connection):
                 WHERE gre_aw BETWEEN 0 AND 6
             ) AS average_gre_analytical_writing
 
-        FROM applicants;
+        FROM applicants
+        LIMIT 1;
     """
 
     average_gpa, average_gre, average_gre_v, average_gre_aw = (
@@ -145,6 +219,7 @@ def question_3(connection):
 # Fall 2026.
 # ---------------------------------------------------------
 
+
 def question_4(connection):
     """Print the average GPA of American Fall 2026 applicants."""
     sql = """
@@ -152,7 +227,8 @@ def question_4(connection):
         FROM applicants
         WHERE LOWER(TRIM(term)) = 'fall 2026'
           AND LOWER(TRIM(us_or_international)) = 'american'
-          AND gpa IS NOT NULL;
+          AND gpa IS NOT NULL
+        LIMIT 1;
     """
 
     average_gpa = fetch_one(connection, sql)[0]
@@ -168,6 +244,7 @@ def question_4(connection):
 # Percentage of Fall 2025 entries that are acceptances.
 # ---------------------------------------------------------
 
+
 def question_5(connection):
     """Print the Fall 2025 acceptance percentage."""
     sql = """
@@ -177,7 +254,8 @@ def question_5(connection):
             )
             / NULLIF(COUNT(*), 0)
         FROM applicants
-        WHERE LOWER(TRIM(term)) = 'fall 2025';
+        WHERE LOWER(TRIM(term)) = 'fall 2025'
+        LIMIT 1;
     """
 
     percentage = fetch_one(connection, sql)[0]
@@ -193,6 +271,7 @@ def question_5(connection):
 # Average GPA of accepted Fall 2026 applicants.
 # ---------------------------------------------------------
 
+
 def question_6(connection):
     """Print the average GPA of accepted Fall 2026 applicants."""
     sql = """
@@ -200,7 +279,8 @@ def question_6(connection):
         FROM applicants
         WHERE LOWER(TRIM(term)) = 'fall 2026'
           AND LOWER(TRIM(status)) LIKE 'accept%'
-          AND gpa IS NOT NULL;
+          AND gpa IS NOT NULL
+        LIMIT 1;
     """
 
     average_gpa = fetch_one(connection, sql)[0]
@@ -242,78 +322,13 @@ def question_7(connection):
                   'ms', 'm.s.', 'msc', 'm.sc.'
               )
               OR LOWER(TRIM(a.degree)) LIKE 'master%'
-          );
+          )
+        LIMIT 1;
     """
 
     count = fetch_one(connection, sql)[0]
 
     print(f"JHU Computer Science master's applicant count: {count:,}")
-
-
-# ---------------------------------------------------------
-# Shared SQL matching conditions for Questions 8 and 9.
-#
-# Question 8 uses the original program field.
-# Question 9 uses the LLM-generated program and university.
-# ---------------------------------------------------------
-
-
-ORIGINAL_UNIVERSITY_CONDITION = """
-    (
-        u.university ~* 'georgetown'
-        OR u.university ~* 'massachusetts[[:space:]]+institute[[:space:]]+of[[:space:]]+technology'
-        OR u.university ~* '(^|[^[:alnum:]])mit([^[:alnum:]]|$)'
-        OR u.university ~* 'stanford'
-        OR u.university ~* 'carnegie[[:space:]]+mellon'
-        OR u.university ~* '(^|[^[:alnum:]])cmu([^[:alnum:]]|$)'
-    )
-"""
-
-ORIGINAL_CS_CONDITION = """
-    (
-        program ~* 'computer[[:space:]]*science'
-        OR program ~* '(^|[^[:alnum:]])cs([^[:alnum:]]|$)'
-    )
-"""
-
-LLM_UNIVERSITY_CONDITION = """
-    (
-        llm_generated_university ~* 'georgetown'
-        OR llm_generated_university ~* 'massachusetts[[:space:]]+institute[[:space:]]+of[[:space:]]+technology'
-        OR llm_generated_university ~* '(^|[^[:alnum:]])mit([^[:alnum:]]|$)'
-        OR llm_generated_university ~* 'stanford'
-        OR llm_generated_university ~* 'carnegie[[:space:]]+mellon'
-        OR llm_generated_university ~* '(^|[^[:alnum:]])cmu([^[:alnum:]]|$)'
-    )
-"""
-
-LLM_CS_CONDITION = """
-    (
-        llm_generated_program ~* 'computer[[:space:]]*science'
-        OR llm_generated_program ~* '(^|[^[:alnum:]])cs([^[:alnum:]]|$)'
-    )
-"""
-
-PHD_CONDITION = """
-    (
-        LOWER(TRIM(degree)) IN (
-            'phd',
-            'ph.d.',
-            'ph.d',
-            'doctorate',
-            'doctoral'
-        )
-        OR LOWER(TRIM(degree)) LIKE 'doctor%'
-    )
-"""
-
-ACCEPTED_CONDITION = """
-    LOWER(TRIM(status)) LIKE 'accept%'
-"""
-
-FALL_2026_CONDITION = """
-    LOWER(TRIM(term)) = 'fall 2026'
-"""
 
 
 # ---------------------------------------------------------
@@ -327,7 +342,7 @@ FALL_2026_CONDITION = """
 def question_8(connection):
     """Count accepted Fall 2026 CS PhD applicants using original fields."""
 
-    sql = f"""
+    sql = """
         SELECT COUNT(*)
         FROM applicants AS a
         JOIN applicant_original_universities AS u
@@ -345,7 +360,17 @@ def question_8(connection):
               a.program ~* 'computer[[:space:]]*science'
               OR a.program ~* '(^|[^[:alnum:]])cs([^[:alnum:]]|$)'
           )
-          AND {ORIGINAL_UNIVERSITY_CONDITION};
+          AND (
+              u.university ~* 'georgetown'
+              OR u.university ~*
+                 'massachusetts[[:space:]]+institute[[:space:]]+of'
+                 '[[:space:]]+technology'
+              OR u.university ~* '(^|[^[:alnum:]])mit([^[:alnum:]]|$)'
+              OR u.university ~* 'stanford'
+              OR u.university ~* 'carnegie[[:space:]]+mellon'
+              OR u.university ~* '(^|[^[:alnum:]])cmu([^[:alnum:]]|$)'
+          )
+        LIMIT 1;
     """
 
     count = fetch_one(connection, sql)[0]
@@ -361,16 +386,42 @@ def question_8(connection):
 # university fields. Report both counts and their difference.
 # ---------------------------------------------------------
 
+
 def question_9(connection, original_count):
     """Print the LLM-field count and difference from Question 8."""
-    sql = f"""
+    sql = """
         SELECT COUNT(*)
         FROM applicants
-        WHERE {FALL_2026_CONDITION}
-          AND {ACCEPTED_CONDITION}
-          AND {PHD_CONDITION}
-          AND {LLM_CS_CONDITION}
-          AND {LLM_UNIVERSITY_CONDITION};
+        WHERE LOWER(TRIM(term)) = 'fall 2026'
+          AND LOWER(TRIM(status)) LIKE 'accept%'
+          AND (
+              LOWER(TRIM(degree)) IN (
+                  'phd',
+                  'ph.d.',
+                  'ph.d',
+                  'doctorate',
+                  'doctoral'
+              )
+              OR LOWER(TRIM(degree)) LIKE 'doctor%'
+          )
+          AND (
+              llm_generated_program ~* 'computer[[:space:]]*science'
+              OR llm_generated_program ~*
+                 '(^|[^[:alnum:]])cs([^[:alnum:]]|$)'
+          )
+          AND (
+              llm_generated_university ~* 'georgetown'
+              OR llm_generated_university ~*
+                 'massachusetts[[:space:]]+institute[[:space:]]+of'
+                 '[[:space:]]+technology'
+              OR llm_generated_university ~*
+                 '(^|[^[:alnum:]])mit([^[:alnum:]]|$)'
+              OR llm_generated_university ~* 'stanford'
+              OR llm_generated_university ~* 'carnegie[[:space:]]+mellon'
+              OR llm_generated_university ~*
+                 '(^|[^[:alnum:]])cmu([^[:alnum:]]|$)'
+          )
+        LIMIT 1;
     """
 
     llm_count = fetch_one(connection, sql)[0]
@@ -386,6 +437,7 @@ def question_9(connection, original_count):
 # Compare Fall 2026 acceptance percentages for American
 # and International applicants.
 # ---------------------------------------------------------
+
 
 def original_question_1(connection):
     """Print Fall 2026 acceptance rates by applicant nationality group."""
@@ -404,7 +456,8 @@ def original_question_1(connection):
           AND LOWER(TRIM(us_or_international))
               IN ('american', 'international')
         GROUP BY TRIM(us_or_international)
-        ORDER BY nationality;
+        ORDER BY nationality
+        LIMIT 2;
     """
 
     with connection.cursor() as cursor:
@@ -430,6 +483,7 @@ def original_question_1(connection):
 # Identify the five universities with the most Fall 2026
 # applicant entries using original university names.
 # ---------------------------------------------------------
+
 
 def original_question_2(connection):
     """Print the five universities with the most Fall 2026 applicants."""

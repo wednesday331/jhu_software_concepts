@@ -15,6 +15,13 @@ huggingface_hub>=0.23.0
 pytest>=8
 pytest-cov>=5
 
+# Code quality and dependency analysis
+pylint>=4,<5
+pydeps>=3,<4
+
 # Sphinx documentation
 sphinx>=7
 sphinx-rtd-theme>=2
+
+# Environment/package installer used for the alternate install workflow
+uv>=0.12,<1

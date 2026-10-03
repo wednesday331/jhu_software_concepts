@@ -204,12 +204,11 @@ def test_database_count(monkeypatch):
 
     assert result == 42
 
-    assert (
-        fake_connection
-        .fake_cursor
-        .executed_sql
-        == "SELECT COUNT(*) FROM applicants"
+    normalized_sql = " ".join(
+        fake_connection.fake_cursor.executed_sql.split()
     )
+
+    assert normalized_sql == "SELECT COUNT(*) FROM applicants LIMIT 1;"
 
 
 @pytest.mark.integration

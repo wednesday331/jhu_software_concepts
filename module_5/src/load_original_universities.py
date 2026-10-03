@@ -1,4 +1,3 @@
-
 """
 Load original downloaded university names into a supplementary table.
 
@@ -55,7 +54,11 @@ def main():
             cursor.executemany(sql, rows)
 
             cursor.execute(
-                "SELECT COUNT(*) FROM applicant_original_universities;"
+                """
+                SELECT COUNT(*)
+                FROM applicant_original_universities
+                LIMIT 1;
+                """
             )
             count = cursor.fetchone()[0]
 

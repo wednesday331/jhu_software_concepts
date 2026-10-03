@@ -1,4 +1,3 @@
-
 """
 Module 3: SQLAlchemy ORM Query Analysis
 
@@ -124,11 +123,13 @@ def format_percentage(value):
 # Question 1
 # ---------------------------------------------------------
 
+
 def question_1(session):
     """Print the Fall 2026 applicant count."""
     count = (
         session.query(func.count(Applicant.p_id))
         .filter(fall_2026_condition())
+        .limit(1)
         .scalar()
     )
 
@@ -139,6 +140,7 @@ def question_1(session):
 # Question 2
 # ---------------------------------------------------------
 
+
 def question_2(session):
     """Print the percentage of classified applicants who are international."""
     nationality = normalized(Applicant.us_or_international)
@@ -146,6 +148,7 @@ def question_2(session):
     international_count = (
         session.query(func.count(Applicant.p_id))
         .filter(nationality == "international")
+        .limit(1)
         .scalar()
     )
 
@@ -157,6 +160,7 @@ def question_2(session):
                 "",
             ).isnot(None)
         )
+        .limit(1)
         .scalar()
     )
 
@@ -172,6 +176,7 @@ def question_2(session):
 # ---------------------------------------------------------
 # Question 3
 # ---------------------------------------------------------
+
 
 def question_3(session):
     """Print average GPA and GRE values for valid applicant records."""
@@ -190,6 +195,7 @@ def question_3(session):
                 Applicant.gre_aw.between(0, 6)
             ),
         )
+        .limit(1)
         .one()
     )
 
@@ -206,6 +212,7 @@ def question_3(session):
 # Question 4
 # ---------------------------------------------------------
 
+
 def question_4(session):
     """Print the average GPA of American Fall 2026 applicants."""
     average = (
@@ -215,6 +222,7 @@ def question_4(session):
             normalized(Applicant.us_or_international) == "american",
             Applicant.gpa.isnot(None),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -228,11 +236,13 @@ def question_4(session):
 # Question 5
 # ---------------------------------------------------------
 
+
 def question_5(session):
     """Print the Fall 2025 acceptance percentage."""
     total = (
         session.query(func.count(Applicant.p_id))
         .filter(fall_2025_condition())
+        .limit(1)
         .scalar()
     )
 
@@ -242,6 +252,7 @@ def question_5(session):
             fall_2025_condition(),
             accepted_condition(),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -257,6 +268,7 @@ def question_5(session):
 # Question 6
 # ---------------------------------------------------------
 
+
 def question_6(session):
     """Print the average GPA of accepted Fall 2026 applicants."""
     average = (
@@ -266,6 +278,7 @@ def question_6(session):
             accepted_condition(),
             Applicant.gpa.isnot(None),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -278,6 +291,7 @@ def question_6(session):
 # ---------------------------------------------------------
 # Question 7
 # ---------------------------------------------------------
+
 
 def question_7(session):
     """Print the JHU Computer Science master's applicant count."""
@@ -303,6 +317,7 @@ def question_7(session):
             computer_science_condition(Applicant.program),
             masters_condition(),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -315,6 +330,7 @@ def question_7(session):
 # ---------------------------------------------------------
 # Question 8
 # ---------------------------------------------------------
+
 
 def question_8(session):
     """Print and return the original-field count for Question 8."""
@@ -333,6 +349,7 @@ def question_8(session):
                 ApplicantOriginalUniversity.university
             ),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -344,6 +361,7 @@ def question_8(session):
 # ---------------------------------------------------------
 # Question 9
 # ---------------------------------------------------------
+
 
 def question_9(session, original_count):
     """Print the LLM-field count and difference from Question 8."""
@@ -360,6 +378,7 @@ def question_9(session, original_count):
                 Applicant.llm_generated_university
             ),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -375,6 +394,7 @@ def question_9(session, original_count):
 # ---------------------------------------------------------
 # Original Question 1
 # ---------------------------------------------------------
+
 
 def original_question_1(session):
     """Print Fall 2026 acceptance rates by applicant nationality group."""
@@ -396,6 +416,7 @@ def original_question_1(session):
         )
         .group_by(nationality)
         .order_by(nationality)
+        .limit(2)
         .all()
     )
 
@@ -418,6 +439,7 @@ def original_question_1(session):
 # ---------------------------------------------------------
 # Original Question 2
 # ---------------------------------------------------------
+
 
 def original_question_2(session):
     """Print the five universities with the most Fall 2026 applicants."""
@@ -506,6 +528,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
     fall_2026_count = (
         session.query(func.count(Applicant.p_id))
         .filter(fall_2026_condition())
+        .limit(1)
         .scalar()
     )
 
@@ -513,6 +536,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
     international_count = (
         session.query(func.count(Applicant.p_id))
         .filter(nationality == "international")
+        .limit(1)
         .scalar()
     )
 
@@ -523,6 +547,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
                 func.trim(Applicant.us_or_international), ""
             ).isnot(None)
         )
+        .limit(1)
         .scalar()
     )
 
@@ -547,6 +572,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
                 Applicant.gre_aw.between(0, 6)
             ),
         )
+        .limit(1)
         .one()
     )
 
@@ -558,6 +584,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
             nationality == "american",
             Applicant.gpa.isnot(None),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -565,6 +592,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
     fall_2025_count = (
         session.query(func.count(Applicant.p_id))
         .filter(fall_2025_condition())
+        .limit(1)
         .scalar()
     )
 
@@ -574,6 +602,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
             fall_2025_condition(),
             accepted_condition(),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -590,6 +619,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
             accepted_condition(),
             Applicant.gpa.isnot(None),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -614,6 +644,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
             computer_science_condition(Applicant.program),
             masters_condition(),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -631,6 +662,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
             computer_science_condition(Applicant.program),
             university_condition(original_university),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -648,6 +680,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
                 Applicant.llm_generated_university
             ),
         )
+        .limit(1)
         .scalar()
     )
 
@@ -666,6 +699,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
         )
         .group_by(func.trim(Applicant.us_or_international))
         .order_by(func.trim(Applicant.us_or_international))
+        .limit(2)
         .all()
     )
 
@@ -729,6 +763,7 @@ def get_analysis_results(session):  # pylint: disable=too-many-locals
             for name, count in top_universities
         ],
     }
+
 
 if __name__ == "__main__":
     main()

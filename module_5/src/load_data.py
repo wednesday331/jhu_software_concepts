@@ -1,15 +1,14 @@
-
 """
-Module 3: Load cleaned Grad Cafe applicant data into PostgreSQL.
+Module 5: Load cleaned Grad Cafe applicant data into PostgreSQL.
 
-Run from the module_3 folder:
-    python load_data.py
+The PostgreSQL schema must already exist before this loader runs.
+The runtime application account does not create or alter database objects.
 
 PostgreSQL connection settings come from environment variables.
 No database password is stored in this file.
 """
-# pylint: disable=duplicate-code
 
+# pylint: disable=duplicate-code
 
 import json
 import os
@@ -40,26 +39,6 @@ EXPECTED_COLUMNS = [
     "llm_generated_program",
     "llm_generated_university",
 ]
-
-CREATE_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS applicants (
-    p_id INTEGER PRIMARY KEY,
-    program TEXT,
-    comments TEXT,
-    url TEXT,
-    status TEXT,
-    date_added DATE,
-    term TEXT,
-    us_or_international TEXT,
-    gpa DOUBLE PRECISION,
-    gre DOUBLE PRECISION,
-    gre_v DOUBLE PRECISION,
-    gre_aw DOUBLE PRECISION,
-    degree TEXT,
-    llm_generated_program TEXT,
-    llm_generated_university TEXT
-);
-"""
 
 INSERT_SQL = """
 INSERT INTO applicants (
@@ -101,7 +80,7 @@ ON CONFLICT (p_id) DO NOTHING;
 
 
 def connect_to_database():
-    """Connect using the environment variables set in PowerShell."""
+    """Connect using PostgreSQL environment variables."""
     return psycopg.connect(
         host=os.environ["PGHOST"],
         port=os.environ["PGPORT"],
@@ -135,7 +114,7 @@ def optional_number(value):
 
 
 def optional_date(value):
-    """Convert dates such as 'Sep 12, 2026' to Python date objects."""
+    """Convert supported date strings to Python date objects."""
     if value is None or str(value).strip() == "":
         return None
 
@@ -157,8 +136,10 @@ def clean_url(value):
     if text is None:
         return None
 
-    # Example: [https://example.com/result/123](https://example.com/result/123)
-    markdown_match = re.fullmatch(r"\[[^\]]+\]\((https?://[^)]+)\)", text)
+    markdown_match = re.fullmatch(
+        r"\[[^\]]+\]\((https?://[^)]+)\)",
+        text,
+    )
 
     if markdown_match:
         return markdown_match.group(1)
@@ -223,14 +204,15 @@ def prepare_record(record, position):
 
 
 def verify_table_columns(cursor):
-    """Stop if an existing applicants table has a different schema."""
+    """Stop if the applicants table is missing or has a different schema."""
     cursor.execute(
         """
         SELECT column_name
         FROM information_schema.columns
         WHERE table_schema = current_schema()
           AND table_name = 'applicants'
-        ORDER BY ordinal_position;
+        ORDER BY ordinal_position
+        LIMIT 100;
         """
     )
 
@@ -238,11 +220,11 @@ def verify_table_columns(cursor):
 
     if actual_columns != EXPECTED_COLUMNS:
         raise RuntimeError(
-            "The existing applicants table does not match the required "
+            "The applicants table is missing or does not match the required "
             f"15-column schema.\nFound: {actual_columns}\n"
             f"Expected: {EXPECTED_COLUMNS}\n"
-            "No data was imported. Inspect the existing table before "
-            "making changes."
+            "No data was imported. Database schema changes must be "
+            "performed by an administrator."
         )
 
 
@@ -278,13 +260,16 @@ def main():
 
     with connect_to_database() as connection:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT current_database();")
+            cursor.execute("SELECT current_database() LIMIT 1;")
             print(f"Connected to database: {cursor.fetchone()[0]}")
 
-            cursor.execute(CREATE_TABLE_SQL)
+            # The application account has no schema CREATE privilege.
+            # Verify that an administrator provisioned the expected table.
             verify_table_columns(cursor)
 
-            cursor.execute("SELECT COUNT(*) FROM applicants;")
+            cursor.execute(
+                "SELECT COUNT(*) FROM applicants LIMIT 1;"
+            )
             before_count = cursor.fetchone()[0]
 
             print(f"Rows in applicants before import: {before_count:,}")
@@ -295,13 +280,13 @@ def main():
                 list(unique_records.values()),
             )
 
-            cursor.execute("SELECT COUNT(*) FROM applicants;")
+            cursor.execute(
+                "SELECT COUNT(*) FROM applicants LIMIT 1;"
+            )
             after_count = cursor.fetchone()[0]
 
             print(f"New rows inserted: {after_count - before_count:,}")
             print(f"Total rows in applicants: {after_count:,}")
-
-        # The connection context commits only if the import succeeds.
 
     print("Import completed successfully!")
 
